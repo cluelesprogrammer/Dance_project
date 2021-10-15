@@ -1,0 +1,34 @@
+import datasets.dataset as dataset
+from torchvision import transforms, utils
+import models.models as models
+import torch
+from torch.utils.data import DataLoader
+import time
+import pandas as pd
+import torch.nn as nn
+from datasets.dataset import GroundTruthGenerator as GT
+import torch.optim as optim
+import copy
+import math
+from functools import partial
+import torch.nn.functional as F
+from torch.utils.data import random_split
+from ray import tune
+from ray.tune import CLIReporter
+from ray.tune.schedulers import ASHAScheduler
+from torchtest import assert_vars_change
+from loss import paf_loss, conf_loss
+from data_loader import lets_dance_loaders, coco_mpii_loaders
+from tqdm import tqdm
+import wandb
+from train import train_epoch
+import math
+
+device = torch.device('cuda:2')
+model = models.Dance_Classifier1()
+model.to(device)
+input = torch.randn(1,3,16,112,112).to(device)
+tot_layers = list(model.children())
+parameters_list = list(model.parameters())
+for i in range(len(parameters_list)):
+	

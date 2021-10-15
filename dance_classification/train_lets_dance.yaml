@@ -1,0 +1,56 @@
+program: train.py
+method: random
+metric:
+ goal: minimize
+ name: per_pixel_loss
+early_terminate:
+ type: hyperband
+ min_iter: 3
+parameters:
+ batch_size:
+  distribution: 'q_log_uniform'
+  q: 1
+  min: 2.08
+  max: 4.16
+ mod_lr:
+  distribution: 'uniform'
+  min: 0
+  max: 0.001
+ mod_mm:
+  distribution: 'uniform'
+  min: 0.85
+  max: 0.95
+ ftrs_lr:
+  distribution: 'uniform'
+  min: 0
+  max: 0.0001
+ ftrs_mm:
+  distribution: 'uniform'
+  min: 0.9
+  max: 0.98
+ paf_stages:
+  values: [4, 5, 6]
+ conf_stages:
+  values: [2, 3, 4]
+ limb_width:
+  values: [2, 3, 4]
+ sigma:
+  values: [2, 3, 4]
+ normalize:
+  values: [1]
+ mod_type:
+  values: [0]
+ train_ftrs:
+  values: [0, 1]
+ img_size:
+  values: [224, 336]
+ trained_mod:
+  values: [1]
+ clip_value:
+  values: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+ sch_mod_type:
+  values: ['onecycle', 'cyclic', 'None', 'cosine_annealing_restarts']
+ sch_ftrs_type:
+  values: [0, 1]
+ rotation:
+  values: [0, 1] 

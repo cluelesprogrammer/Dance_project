@@ -1,0 +1,87 @@
+import models.models as models
+import datasets.dataset as dataset
+import os
+from sklearn.model_selection import KFold
+import wandb
+import numpy as np
+import pandas as pd
+import torch.nn as nn
+import torch
+import torchvision.transforms as transforms
+import torch.multiprocessing as mp
+from tqdm import tqdm
+import sys
+from torch.utils.data import DataLoader
+
+def validate(config):
+	with wandb.init(project='test_charts', config=config, name='i3d_rgb_bodypose', dir='wandbdir'):
+		os.environ['WANDB_SILENT'] = 'true'
+		config = wandb.config
+		print('-' *20, 'dataset preparation', '-'*20)
+		mean, std = [0.4100, 0.3402, 0.3244], [0.2834, 0.2593, 0.2477]
+		device = torch.device('cuda:2')
+		transform = {}
+		transform['frames'] = transforms.Compose([transforms.CenterCrop(config.img_size), transforms.Normalize(mean=mean, std=std), transforms.RandomGrayscale(), transforms.ColorJitter()])
+		network = models.RGB_Bodypose_Classifier()
+		checkpoint = torch.load('models/classifier/i3d_rgb_bodypose_0_epoch_60.pt', map_location=torch.device('cpu'))
+		network.load_state_dict(checkpoint['model_state_dict'])
+		network.to(device)
+		softmax = nn.Softmax(dim=1)
+		all_videos_df = pd.read_csv('./data/letsdance/video_frames.csv')
+		all_ids = list(range(len(all_videos_df)))
+		val_ids = np.random.choice(all_ids, int(0.1 * len(all_ids)))
+		val_df = all_videos_df.iloc[val_ids]
+		val_data = dataset.DanceVideoDataset(config.img_size, val_df, 'val', transform=transform, optical_flow=False)
+		val_loader = DataLoader(val_data, batch_size=config.batch_size, num_workers=12, pin_memory=True, shuffle=True)
+		labels = list(val_data.dance_type_dict.keys())
+		dataset_style_counts, correct_style_predictions = dict(zip(range(16), [0]*16)), dict(zip(range(16), [0]*16))
+		# Run the training loop for defined number of epochs
+		best_accuracy = 0.0
+		correct, total = 0, 0
+		network.eval()
+		val_targets, val_predictions = [], []
+		for data in tqdm(val_loader):
+			frames, targets = data['frames'].to(device), data['dance_type'].to(device)
+			val_targets.append(targets.cpu().numpy())
+			with torch.no_grad():
+				outputs = network(frames)
+			outputs = softmax(outputs)
+			_, predicted = torch.max(outputs.data, 1)
+			val_predictions.append(predicted.cpu().numpy())
+			dance_label, counts_in_batch = torch.unique(targets, return_counts=True)
+			batch_style_counts = dict(zip(dance_label.cpu().numpy(), counts_in_batch.cpu().numpy()))
+			style, correct_instances = torch.unique(predicted[predicted==targets], return_counts=True)
+			correct_in_batch = dict(zip(style.cpu().numpy(), correct_instances.cpu().numpy()))
+			for c in correct_in_batch:
+				correct_style_predictions[c] += correct_in_batch[c]
+			for k in batch_style_counts:
+				dataset_style_counts[k] += batch_style_counts[k]
+			total += targets.size(0)
+			correct += (predicted == targets).sum().item()
+		dance_style_accuracy, dance_style_composition = {}, {}
+		for (i,l) in enumerate(labels):
+			try:
+				dance_style_accuracy[l] = 100 * correct_style_predictions[i] / dataset_style_counts[i]
+				#dance_style_composition[l] = 100 * dataset_style_counts[i] / (len(val_ids))
+			except:
+				dance_style_accuracy[l] = 0
+			try:
+				dance_style_composition[l] = dataset_style_counts[i]
+			except:
+				dance_style_composition[l] = 0
+
+		print('dataset composition ', dance_style_composition)
+		data_val_composition = [[l, share] for (l, share) in dance_style_composition.items()]
+		data_accuracy_by_style = [[l, accur] for (l, accur) in dance_style_accuracy.items()]
+		composition_table = wandb.Table(data=data_val_composition, columns=['dance_style', 'share_of_val_dataset'])
+		print('composition table ', data_val_composition)
+		print('data accuracy by stlye', data_accuracy_by_style)
+		wandb.log({'dance_composition_bar_chart': wandb.plot.bar(composition_table, 'dance_style', 'share_of_dataset', title='dance_dataset_composition')})
+		accuracy_table = wandb.Table(data=data_accuracy_by_style, columns=['dance_style', 'accuracy'])
+		wandb.log({'accuracy_bar_chart': wandb.plot.bar(accuracy_table, 'dance_style', 'accuracy', title='accuracy_of_the_model_according_to_dance_style')})
+		accuracy = 100.0 * correct/total
+		wandb.log({'accuracy': accuracy})
+
+config = {'batch_size': 6, 'img_size': 224}
+validate(config)
+

@@ -1,0 +1,18 @@
+program: train.py
+method: grid
+metric:
+ name: min_val_loss
+ goal: minimize
+parameters:
+ batch_size:
+  values: [64]
+ train_features:
+  values: [1]
+ features_lr:
+  values: [1e-5, 1e-6, 1e-7, 1e-8, 1e-9, 1e-10]
+ paf_activation:
+  values: ['tanh']
+ conf_activation:
+  values: ['None', 'sigmoid']
+ tot_epochs:
+  values: [10]

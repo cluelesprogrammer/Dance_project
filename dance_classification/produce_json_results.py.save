@@ -1,0 +1,113 @@
+from pycocotools.coco import COCO
+import pandas as pd
+import time
+from models import models
+from pycocotools.cocoeval import COCOeval
+import skimage.io as io
+from skimage.transform import resize
+from tqdm import tqdm
+import numpy as np
+import torch
+import torch.nn as nn
+import argparse
+from skimage.transform import rescale
+
+def nms(confidence_map):
+	thres = 0.1
+	confidence_map[confidence_map < 0.1] = 0
+	max_pool = nn.MaxPool2d(kernel_size=5, stride=1,padding=2)
+	pooled_confidence_map = max_pool(confidence_map)
+	pooled_confidence_map[torch.where(pooled_confidence_map != confidence_map)] = 0
+	max_conf_values, max_conf_indices = torch.max(pooled_confidence_map, dim=1)
+	supressed_conf_map = torch.zeros(pooled_confidence_map.shape).to(device)
+	for ind in np.ndindex(pooled_confidence_map.shape[2:]):
+		supressed_conf_map[0,max_conf_indices[0, ind[0], ind[1]], ind[0], ind[1]] = max_conf_values[0, ind[0], ind[1]]
+	return supressed_conf_map
+
+
+def parse():
+	parser = argparse.ArgumentParser(description='model and checkpoint to test')
+	parser.add_argument('model_type', type=str, help='model type')
+	parser.add_argument('-g', '--gpu_device', type=int, help='enter the location to load tensors and models on')
+	parser.add_argument('-checkpoint', '--checkpoint location', type=str, help='checkpoint to load')
+	parser.add_argument('-paf and conf stages', '--paf_conf_stages', type=str, help='number of paf and conf stages in that order')
+	arguments = parser.parse_args()
+	return arguments
+
+def find_parts(heatmaps, pafs):
+	candidates = []
+	for (i, map) in enumerate(heatmaps):
+		candidates_y, candidates_x = np.where(map > 0)
+		if (len(candidates_y) == 0):
+			candidates.append([])
+			continue
+		score = map[candidates_y, candidates_x]
+		candidates_yx = tuple(zip(candidates_y, candidates_x))
+		yx_coordinates_score = tuple(zip(candidates_yx, score))
+		candidates.append([yx_coordinates_score])
+	joint_limb_correspondence = np.array([[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[1,2],[2,16],[3,4],[16,2],[1,5],[5,6], [6,7],[5,17],[0,1],[0,14], [0,15],[14,16], [15,17]])
+
+	print(np.max(pafs), np.min(pafs))
+	"""
+	for (i, joints_id) in enumerate (joints_limb_correspondece):
+		if (candidates[joints_id[0]] == [] or candidates[joints_id[1]] == []):
+			continue
+		else:
+	"""
+
+args = parse()
+if (args.model_type == 'bodypose_old'):
+	model = models.bodypose_model().float()
+else:
+	print('not a valid model')
+
+if (args.gpu_device):
+	device = torch.device('cuda:{}'.format(args.gpu_device))
+else:
+	device = torch.device('cpu')
+
+model = model.to(device)
+#train_annot_path = 'data/coco/annotations/person_keypoints_train2017.json'
+coco = COCO('data/coco/annotations/person_keypoints_val2017.json')
+
+for i in tqdm(coco.getImgIds()):
+	print(i)
+	img_metadata = coco.loadImgs(i)[0]
+	file_loc = 'data/coco/images/val2017/' + img_metadata['file_name']
+	img_array = io.imread(file_loc)
+	sorted_dims = sorted(set(img_array.shape))
+	if (sorted_dims[0] == 3):
+		smallest_dim = sorted_dims[1]
+		rescale_ratio = 224 / smallest_dim
+		new_shape = (int(img_array.shape[0] * rescale_ratio), int(img_array.shape[1] * rescale_ratio), 3)
+	else:
+		smallest_dim = sorted_dims[0]
+		rescale_ratio = 224 / smallest_dim
+		new_shape = (int(img_array.shape[0] * rescale_ratio), int(img_array.shape[1] * rescale_ratio))
+	img_array = resize(image=img_array, output_shape=new_shape)
+	if (len(img_array.shape) < 3):
+		img_array = np.stack([img_array, img_array, img_array], axis=2)
+	mean, std = np.mean(img_array), np.std(img_array)
+	normalized_img = (img_array - mean) / std
+	normalized_img = img_array
+	tensor_img = torch.from_numpy(normalized_img).permute(2,0,1)
+	tensor_img = tensor_img.unsqueeze(0)
+	tensor_img = tensor_img.to(device)
+	with torch.no_grad():
+		pafs, confs = model(tensor_img.float())
+	upsample = torch.nn.Upsample(scale_factor=8)
+	final_stage_conf_map = confs[-1]
+	#final_stage_conf_map = upsample(final_stage_conf_map)
+	#print(torch.sum((final_stage_conf_map > 0).int()), 'non zero values in confidence map with background')
+	nms_confs = nms(final_stage_conf_map)
+	#print(torch.sum((nms_confs > 0).int()), ' non zero values in confidence map with background after non max supression')
+	heatmaps = nms_confs[0, 0:18, :, :]
+	#print(torch.sum((heatmaps > 0).int()), ' non zero values in confidence map without background after non max supression')
+	parts = find_parts(heatmaps.squeeze(0).cpu().numpy(), pafs[0].squeeze(0).cpu().numpy())
+	break
+	#img_array = io.imread(img_metadata['coco_url'])
+
+
+
+
+
