@@ -147,6 +147,7 @@ else:
 model = model.to(device)
 #train_annot_path = 'data/coco/annotations/person_keypoints_train2017.json'
 coco = COCO('data/coco/annotations/person_keypoints_val2017.json')
+print('this')
 
 for i in tqdm(coco.getImgIds()):
 	print(i)
