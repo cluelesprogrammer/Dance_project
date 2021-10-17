@@ -1,8 +1,9 @@
 from pycocotools.coco import COCO
 import pandas as pd
+import os
 import time
 from scipy.ndimage.filters import gaussian_filter
-from models import models
+import bodypose_models
 from pycocotools.cocoeval import COCOeval
 import skimage.io as io
 from skimage.transform import resize
@@ -47,7 +48,7 @@ def find_parts(heatmaps, pafs):
 		score = map[candidates_y, candidates_x]
 		peaks_id = list(range(peaks_counter, peaks_counter + len(candidates_y)))
 		peaks_counter += len(candidates_y)
-		candidates.append([candidates_y, candidates_x, score, peaks_id])
+		candidates.append(np.array(list(zip([candidates_y, candidates_x, score, peaks_id]))))
 	joint_limb_correspondence = np.array([[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[1,2],[2,16],[3,4],[16,2],[1,5],[5,6], [6,7],[5,17],[0,1],[0,14], [0,15],[14,16], [15,17]])
 	limb_width = 3
 	for (i, joints_id) in enumerate (joint_limb_correspondence):
@@ -55,12 +56,10 @@ def find_parts(heatmaps, pafs):
 			continue
 		else:
 			candidates_i, candidates_j = candidates[joints_id[0]], candidates[joints_id[1]]
-			i_ys, i_xs, i_scores, i_peaks_ids = candidates_i[0] * 8, candidates_i[1] * 8, candidates_i[2] #part affinity fields are eight times as big
-			j_ys, j_xs, j_scores, j_peaks_ids = candidates_j[0] * 8, candidates_j[1] * 8, candidates_j[2]
-			for i_yx in np.array(list(zip(i_ys, i_xs, i_peak_ids))):
-				candidate_id_i = 
+			i_ys, i_xs, i_scores, i_peaks_ids = candidates_i[0] * 8, candidates_i[1] * 8, candidates_i[2], candidates_i[3] #part affinity fields are eight times as big
+			j_ys, j_xs, j_scores, j_peaks_ids = candidates_j[0] * 8, candidates_j[1] * 8, candidates_j[2], candidates_j[3]
+			for (i_yx, i_peak_id) in np.array(list(zip(i_ys, i_xs, i_peak_ids))):
 				for j_yx in np.array(list(zip(j_ys, j_xs))):
-					limb_id = 
 					diff, mag = (i_yx - j_yx).astype(float), np.linalg.norm(i_yx - j_yx)
 					unit_vec = np.divide(diff, mag, out=np.zeros_like(diff), where=mag!=0)
 					unit_vec_p = np.array([-unit_vec[1], unit_vec[0]])
@@ -135,7 +134,7 @@ def find_parts(heatmaps, pafs):
 	"""
 args = parse()
 if (args.model_type == 'bodypose_old'):
-	model = models.bodypose_model().float()
+	model = bodypose_models.bodypose_model().float()
 else:
 	print('not a valid model')
 
@@ -146,13 +145,12 @@ else:
 
 model = model.to(device)
 #train_annot_path = 'data/coco/annotations/person_keypoints_train2017.json'
-coco = COCO('data/coco/annotations/person_keypoints_val2017.json')
-print('this')
+parent_dir = os.path.dirname(os.getcwd())
+coco = COCO(os.path.join(parent_dir, 'data/coco/annotations/person_keypoints_val2017.json'))
 
 for i in tqdm(coco.getImgIds()):
-	print(i)
 	img_metadata = coco.loadImgs(i)[0]
-	file_loc = 'data/coco/images/val2017/' + img_metadata['file_name']
+	file_loc = os.path.join(parent_dir, "data/coco/images/val2017", img_metadata["file_name"])
 	img_array = io.imread(file_loc)
 	sorted_dims = sorted(set(img_array.shape))
 	if (sorted_dims[0] == 3):
