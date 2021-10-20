@@ -48,18 +48,20 @@ def find_parts(heatmaps, pafs):
 		score = map[candidates_y, candidates_x]
 		peaks_id = list(range(peaks_counter, peaks_counter + len(candidates_y)))
 		peaks_counter += len(candidates_y)
-		candidates.append(np.array(list(zip([candidates_y, candidates_x, score, peaks_id]))))
+		candidates.append(np.array(list(zip(candidates_y, candidates_x, score, peaks_id))))
 	joint_limb_correspondence = np.array([[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[1,2],[2,16],[3,4],[16,2],[1,5],[5,6], [6,7],[5,17],[0,1],[0,14], [0,15],[14,16], [15,17]])
 	limb_width = 3
+	paf_summation = []
 	for (i, joints_id) in enumerate (joint_limb_correspondence):
 		if (candidates[joints_id[0]] == [] or candidates[joints_id[1]] == []):
 			continue
 		else:
-			candidates_i, candidates_j = candidates[joints_id[0]], candidates[joints_id[1]]
-			i_ys, i_xs, i_scores, i_peaks_ids = candidates_i[0] * 8, candidates_i[1] * 8, candidates_i[2], candidates_i[3] #part affinity fields are eight times as big
-			j_ys, j_xs, j_scores, j_peaks_ids = candidates_j[0] * 8, candidates_j[1] * 8, candidates_j[2], candidates_j[3]
-			for (i_yx, i_peak_id) in np.array(list(zip(i_ys, i_xs, i_peak_ids))):
-				for j_yx in np.array(list(zip(j_ys, j_xs))):
+			i_yxs, i_scores, i_peak_ids = candidates[joints_id[0]][:, 0:2] * 8, candidates[joints_id[0]][:, 2], candidates[joints_id[0]][:, 3] #part affinity fields are eight times as big
+			j_yxs, j_scores, j_peak_ids = candidates[joints_id[1]][:, 0:2] * 8, candidates[joints_id[1]][:, 2], candidates[joints_id[1]][:, 3] #part affinity fields are eight times as big
+			for (i, i_yx) in enumerate(i_yxs):
+				i_peak_id, i_score = i_peak_ids[i], i_scores[i]
+				for (j, j_yx) in enumerate(j_yxs):
+					j_peak_id, j_score = j_peak_ids[j], j_scores[j]
 					diff, mag = (i_yx - j_yx).astype(float), np.linalg.norm(i_yx - j_yx)
 					unit_vec = np.divide(diff, mag, out=np.zeros_like(diff), where=mag!=0)
 					unit_vec_p = np.array([-unit_vec[1], unit_vec[0]])
@@ -81,8 +83,11 @@ def find_parts(heatmaps, pafs):
 					except:
 						paf_points_Y, paf_points_X = paf_points_Y.astype(int), paf_points_X.astype(int)
 						paf_vector = np.array([sum(pafs[2 * i][paf_points_Y, paf_points_X]), sum(pafs[2 * i + 1][paf_points_Y, paf_points_X])])
-					print(paf_vector/mag)
-					"""
+					paf_summation.append([i_peak_id, j_peak_id, paf_vector/mag])
+			print(paf_summation)
+			return
+
+				"""
 					if (sa):
 						print('same level joints paf points')
 					else:
