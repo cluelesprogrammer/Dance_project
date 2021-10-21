@@ -10,6 +10,7 @@ from skimage.transform import resize
 from tqdm import tqdm
 import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 import torch.nn as nn
 import argparse
 from matplotlib.path import Path
@@ -51,15 +52,18 @@ def find_parts(heatmaps, pafs):
 		candidates.append(np.array(list(zip(candidates_y, candidates_x, score, peaks_id))))
 	joint_limb_correspondence = np.array([[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[1,2],[2,16],[3,4],[16,2],[1,5],[5,6], [6,7],[5,17],[0,1],[0,14], [0,15],[14,16], [15,17]])
 	limb_width = 3
-	paf_summation = []
-	for (i, joints_id) in enumerate (joint_limb_correspondence):
+	peaks_to_limb_assignment = {}
+	for (limb_id, joints_id) in enumerate (joint_limb_correspondence):
+		paf_matrix = []
 		if (candidates[joints_id[0]] == [] or candidates[joints_id[1]] == []):
+			print('there is no limb of type {} present'.format(limb_id))
 			continue
 		else:
 			i_yxs, i_scores, i_peak_ids = candidates[joints_id[0]][:, 0:2] * 8, candidates[joints_id[0]][:, 2], candidates[joints_id[0]][:, 3] #part affinity fields are eight times as big
 			j_yxs, j_scores, j_peak_ids = candidates[joints_id[1]][:, 0:2] * 8, candidates[joints_id[1]][:, 2], candidates[joints_id[1]][:, 3] #part affinity fields are eight times as big
 			for (i, i_yx) in enumerate(i_yxs):
 				i_peak_id, i_score = i_peak_ids[i], i_scores[i]
+				paf_row = []
 				for (j, j_yx) in enumerate(j_yxs):
 					j_peak_id, j_score = j_peak_ids[j], j_scores[j]
 					diff, mag = (i_yx - j_yx).astype(float), np.linalg.norm(i_yx - j_yx)
@@ -79,29 +83,30 @@ def find_parts(heatmaps, pafs):
 					paf_points = possible_points[path.contains_points(possible_points)]
 					paf_points_Y, paf_points_X = paf_points[:,0], paf_points[:,1]
 					try:
-						paf_vector = np.array([sum(pafs[2 * i][paf_points_Y, paf_points_X]), sum(pafs[2 * i + 1][paf_points_Y, paf_points_X])])
+						paf_vector = np.array([sum(pafs[2 * limb_id][paf_points_Y, paf_points_X]), sum(pafs[2 * limb_id + 1][paf_points_Y, paf_points_X])])
 					except:
 						paf_points_Y, paf_points_X = paf_points_Y.astype(int), paf_points_X.astype(int)
-						paf_vector = np.array([sum(pafs[2 * i][paf_points_Y, paf_points_X]), sum(pafs[2 * i + 1][paf_points_Y, paf_points_X])])
-					paf_summation.append([i_peak_id, j_peak_id, paf_vector/mag])
-			print(paf_summation)
-			return
-
-				"""
-					if (sa):
-						print('same level joints paf points')
+						paf_vector = np.array([sum(pafs[2 * limb_id][paf_points_Y, paf_points_X]), sum(pafs[2 * limb_id + 1][paf_points_Y, paf_points_X])])/mag
+						paf_value = np.sqrt(np.sum(paf_vector * paf_vector))
+						paf_row.append(paf_value * -1)
+				paf_matrix.append(paf_row)
+			row_ind, col_ind = linear_sum_assignment(paf_matrix)
+			peaks_to_limb_assignment[limb_id] = list(zip(i_peak_ids[row_ind], j_peak_ids[col_ind]))
+	print(candidates)
+	print(peaks_to_limb_assignment)
+	"""
+	if (sa):
+					print('same level joints paf points')
 					else:
 						print('diff level joints paf points')
 					try:
 					except:
 						print(i_yx, j_yx)
-					"""
 
 
 
 
 
-	"""
 		limb2_co = np.vstack([joints[self.limb_order[l][1]] for l in range(len(self.limb_order))]).reshape(-1,2)
 		#finding magnitude of each limb vector for unit vector calculation
 		#finding perpendicular unit vector of a limb to get a box for the limb
@@ -152,8 +157,11 @@ model = model.to(device)
 #train_annot_path = 'data/coco/annotations/person_keypoints_train2017.json'
 parent_dir = os.path.dirname(os.getcwd())
 coco = COCO(os.path.join(parent_dir, 'data/coco/annotations/person_keypoints_val2017.json'))
+j = 0
+print(np.array([[1,8],[8,9],[9,10],[1,11],[11,12],[12,13],[1,2],[2,16],[3,4],[16,2],[1,5],[5,6], [6,7],[5,17],[0,1],[0,14], [0,15],[14,16], [15,17]]))
 
 for i in tqdm(coco.getImgIds()):
+	since = time.time()
 	img_metadata = coco.loadImgs(i)[0]
 	file_loc = os.path.join(parent_dir, "data/coco/images/val2017", img_metadata["file_name"])
 	img_array = io.imread(file_loc)
@@ -187,7 +195,9 @@ for i in tqdm(coco.getImgIds()):
 	heatmaps = nms_confs[0, 0:18, :, :]
 	#print(torch.sum((heatmaps > 0).int()), ' non zero values in confidence map without background after non max supression')
 	parts = find_parts(heatmaps.squeeze(0).cpu().numpy(), upsample(pafs[0]).squeeze(0).cpu().numpy())
-	break
+	if (j == 5):
+		break
+	j += 1
 	#img_array = io.imread(img_metadata['coco_url'])
 
 
