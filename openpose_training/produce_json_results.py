@@ -61,12 +61,14 @@ def find_parts(heatmaps, pafs):
 		else:
 			i_yxs, i_scores, i_peak_ids = candidates[joints_id[0]][:, 0:2] * 8, candidates[joints_id[0]][:, 2], candidates[joints_id[0]][:, 3] #part affinity fields are eight times as big
 			j_yxs, j_scores, j_peak_ids = candidates[joints_id[1]][:, 0:2] * 8, candidates[joints_id[1]][:, 2], candidates[joints_id[1]][:, 3] #part affinity fields are eight times as big
+			#assigning joints to limbs
 			for (i, i_yx) in enumerate(i_yxs):
 				i_peak_id, i_score = i_peak_ids[i], i_scores[i]
 				paf_row = []
 				for (j, j_yx) in enumerate(j_yxs):
 					j_peak_id, j_score = j_peak_ids[j], j_scores[j]
 					diff, mag = (i_yx - j_yx).astype(float), np.linalg.norm(i_yx - j_yx)
+					"""
 					unit_vec = np.divide(diff, mag, out=np.zeros_like(diff), where=mag!=0)
 					unit_vec_p = np.array([-unit_vec[1], unit_vec[0]])
 					vec_offset = unit_vec_p * (limb_width/2)
@@ -80,7 +82,9 @@ def find_parts(heatmaps, pafs):
 					else:
 						Y, X = np.mgrid[min(i_yx[0], j_yx[0]): max(i_yx[0], j_yx[0]), min(i_yx[1], j_yx[1]): max(i_yx[1], j_yx[1])]
 					possible_points = np.vstack((Y.ravel(), X.ravel())).T
-					paf_points = possible_points[path.contains_points(possible_points)]
+					paf_points1 = possible_points[path.contains_points(possible_points)]
+					"""
+					paf_points = np.linspace(i_yx, j_yx, num=10, dtype=int)
 					paf_points_Y, paf_points_X = paf_points[:,0], paf_points[:,1]
 					try:
 						paf_vector = np.array([sum(pafs[2 * limb_id][paf_points_Y, paf_points_X]), sum(pafs[2 * limb_id + 1][paf_points_Y, paf_points_X])])
@@ -92,56 +96,9 @@ def find_parts(heatmaps, pafs):
 				paf_matrix.append(paf_row)
 			row_ind, col_ind = linear_sum_assignment(paf_matrix)
 			peaks_to_limb_assignment[limb_id] = list(zip(i_peak_ids[row_ind], j_peak_ids[col_ind]))
-	print(candidates)
-	print(peaks_to_limb_assignment)
-	"""
-	if (sa):
-					print('same level joints paf points')
-					else:
-						print('diff level joints paf points')
-					try:
-					except:
-						print(i_yx, j_yx)
+		print(peaks_to_limb_assignment)
+		#assigning limbs to people
 
-
-
-
-
-		limb2_co = np.vstack([joints[self.limb_order[l][1]] for l in range(len(self.limb_order))]).reshape(-1,2)
-		#finding magnitude of each limb vector for unit vector calculation
-		#finding perpendicular unit vector of a limb to get a box for the limb
-		mag = self.get_magnitude(unit_vecs_p)
-		unit_vecs_p = self.no_error_div(unit_vecs_p, mag)
-		#finding how much the co-ordinates of joints must be offset to get the bounding box co-ordinates for each limb
-		#shape of array containing all limbs separated by joint type
-		sep_shape = (len(self.limb_order), joints.shape[1])
-		#getting bounding boxes
-		#the joints are set to (0,0) if they are not present to acheive uniformity in data, so masking is used to not make bounding box with them
-		limbs_inds = np.where(limbs_mask == 1)
-		unit_vecs = unit_vecs.reshape((sep_shape[0], sep_shape[1], 2))
-		limbs_mask_ext = np.tile(limbs_mask, (1, 2)).reshape(unit_vecs.shape)
-		unit_vecs *= limbs_mask_ext
-
-		#declaring outside of loop to same function being carried out everytime
-		paf_truths = []
-		paf_vec_x, paf_vec_y = np.zeros(self.img_size), np.zeros(self.img_size)
-		since = time.time()
-		for i in range(sep_shape[0]):
-			boxes = bounding_boxes_co[i]
-			for i, m in enumerate(masks):
-				mask = m.reshape(self.img_size)
-				#print(mask)
-				l = len(paf_vec_x[mask])
-				paf_vec_x[mask] += np.repeat(unit_vec[i][0], l)
-				paf_vec_y[mask] += np.repeat(unit_vec[i][1], l)
-			mag = np.sqrt(paf_vec_x * paf_vec_x + paf_vec_y * paf_vec_y)
-			paf_vec_x = self.no_error_div(paf_vec_x, mag)
-			paf_vec_y = self.no_error_div(paf_vec_y, mag)
-			paf_truths.append(paf_vec_x)
-			paf_truths.append(paf_vec_y)
-			paf_vec_x, paf_vec_y = np.zeros(self.img_size), np.zeros(self.img_size)
-			candidates_i_y, candidates_i_x, score_i = candidates[joints_id[0]]
-	"""
 args = parse()
 if (args.model_type == 'bodypose_old'):
 	model = bodypose_models.bodypose_model().float()
@@ -195,9 +152,8 @@ for i in tqdm(coco.getImgIds()):
 	heatmaps = nms_confs[0, 0:18, :, :]
 	#print(torch.sum((heatmaps > 0).int()), ' non zero values in confidence map without background after non max supression')
 	parts = find_parts(heatmaps.squeeze(0).cpu().numpy(), upsample(pafs[0]).squeeze(0).cpu().numpy())
-	if (j == 5):
-		break
-	j += 1
+	print(time.time() - since)
+	break
 	#img_array = io.imread(img_metadata['coco_url'])
 
 
