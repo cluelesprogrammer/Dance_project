@@ -1,1 +1,0 @@
-folder for trained model weights or checkpoints
