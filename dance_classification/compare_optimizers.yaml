@@ -1,3 +1,0 @@
-img_size: 386
-batch_size: 32
-lrs: [1e-6, 1e-4, 1e-3]
