@@ -1,7 +1,8 @@
-Code for training Openpose model(sequential CNN based model produces joints' and limbs' heatmaps) on dance dataset. The code trains the Openpose model that has been trained on COCO pose estimation model with the Let's dance dataset that features dancers in numerous dance performances scenarios. 
-
+This project provides the code to train the popular OpenPose model on dance dataset either from scratch or retrain the pretrained Openpose model. Also, code to train several dance classification models has been provided.
 
 -------------------------------Openpose-------------------------------
+
+Training Openpose model(sequential CNN based model produces joints' and limbs' heatmaps) on dance dataset. The pretrained older version of OpenPose model, trained on pose estimation dataset COCO dataset, can be further trained. The newer version of OpenPose can be trained from scratch.
 
 Training Openpose:
 
@@ -16,7 +17,7 @@ Training Openpose:
 
 ------------------------Dance Classification----------------------------
 
-Training Classifier models
+For training Classifier models. Models that use OpenPose, Optical flow as features extractor have been explored here.
 
 - python classifier_train.py <arguments>
 
