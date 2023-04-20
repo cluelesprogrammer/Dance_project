@@ -1,3 +1,6 @@
+Code for training Openpose model(sequential CNN based model produces joints' and limbs' heatmaps) on dance dataset. The code trains the Openpose model that has been trained on COCO pose estimation model with the Let's dance dataset that features dancers in numerous dance performances scenarios. 
+
+
 -------------------------------Openpose-------------------------------
 
 Training Openpose:
